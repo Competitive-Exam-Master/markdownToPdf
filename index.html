@@ -360,9 +360,8 @@
         let currentPdfBlob = null;
         let currentPdfFile = null;
 
-        // --- THE FIX FOR GITHUB PAGES MATHJAX SHIFT ---
-        // Converts MathJax 'ex' units to solid 'em' units so baselines survive PDF generation over network delays.
-        function fixMathBaselines(container) {
+        // Convert fragile 'ex' network units to solid 'em' units so MathJax baselines survive PDF generation
+        function forceMathBaselines(container) {
             container.querySelectorAll('mjx-container svg').forEach(svg => {
                 if (svg.style.verticalAlign && svg.style.verticalAlign.includes('ex')) {
                     svg.style.verticalAlign = (parseFloat(svg.style.verticalAlign) * 0.5) + 'em'; 
@@ -402,10 +401,7 @@
             output.innerHTML = marked.parse(processedText, { breaks: true });
             applyCustomStyles();
             if (window.MathJax) { 
-                MathJax.typesetPromise([output]).then(() => {
-                    fixMathBaselines(output);
-                    invalidateGeneratedPdf();
-                }); 
+                MathJax.typesetPromise([output]).then(() => invalidateGeneratedPdf()); 
             } else {
                 invalidateGeneratedPdf();
             }
@@ -502,11 +498,14 @@
 
             if (window.MathJax) { 
                 await MathJax.typesetPromise([pdfPreviewBox]); 
-                fixMathBaselines(pdfPreviewBox);
+                // Fix baselines for the live preview as well
+                forceMathBaselines(pdfPreviewBox);
             }
             drawPageBreaks();
+            invalidateGeneratedPdf();
         }
 
+        /* Simplified, clean calculation. No DOM injection for layout. */
         async function drawPageBreaks() {
             await new Promise(r => setTimeout(r, 50));
             const overlays = document.getElementById('pdf-page-overlays');
@@ -528,7 +527,7 @@
             const totalContentHeight = pdfPreviewBox.scrollHeight;
             const totalPages = Math.max(1, Math.ceil(totalContentHeight / pageHeightPx));
             
-            // Draw page numbers (bottom center alignment) for live preview
+            // Draw page numbers in the preview (bottom center alignment)
             for (let i = 1; i <= totalPages; i++) {
                 const pageNumDiv = document.createElement('div');
                 pageNumDiv.style.position = 'absolute';
@@ -635,9 +634,16 @@
             const l = parseFloat(document.getElementById('m-left').value) || 0; const r = parseFloat(document.getElementById('m-right').value) || 0;
 
             deskContainer.style.zoom = '1';
-            
             document.body.classList.add('is-generating-pdf');
-            await new Promise(res => setTimeout(res, 200)); 
+            
+            // Wait for all remote fonts to completely load before doing anything
+            await document.fonts.ready;
+            
+            // Re-apply the unit conversion just to be completely safe before snapshotting
+            forceMathBaselines(pdfPreviewBox);
+            
+            // Tiny delay to let browser re-render un-zoomed DOM
+            await new Promise(res => setTimeout(res, 300)); 
             
             const opt = {
                 margin: [t, l, b, r], filename: 'document.pdf', image: { type: 'jpeg', quality: 0.98 },
@@ -655,8 +661,8 @@
                     for (let i = 1; i <= finalPagesCount; i++) {
                         pdf.setPage(i); pdf.setFontSize(10); pdf.setTextColor(150);
                         const pw = pdf.internal.pageSize.getWidth(); const ph = pdf.internal.pageSize.getHeight();
-                        // Place at exact bottom center
-                        pdf.text('- ' + i + ' -', pw / 2, ph - (b / 2 > 8 ? b / 2 : 8), { align: 'center' });
+                        // Place at exact bottom center (10mm from bottom edge)
+                        pdf.text('- ' + i + ' -', pw / 2, ph - 10, { align: 'center' });
                     }
                     return pdf;
                 });
