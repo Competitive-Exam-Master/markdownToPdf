@@ -360,19 +360,49 @@
         let currentPdfBlob = null;
         let currentPdfFile = null;
 
-        // Convert fragile 'ex' network units to solid 'em' units so MathJax baselines survive PDF generation
-        function forceMathBaselines(container) {
-            container.querySelectorAll('mjx-container svg').forEach(svg => {
-                if (svg.style.verticalAlign && svg.style.verticalAlign.includes('ex')) {
-                    svg.style.verticalAlign = (parseFloat(svg.style.verticalAlign) * 0.5) + 'em'; 
+        // --- THE DEFINITIVE FIX FOR GITHUB PAGES ---
+        // Converts fragile SVGs into hardcoded Base64 images right before generating the PDF.
+        // html2canvas handles images perfectly and ignores network font latency.
+        function convertMathToImages(container) {
+            container.querySelectorAll('mjx-container').forEach(mjx => {
+                const svg = mjx.querySelector('svg');
+                if (!svg) return;
+
+                let w = svg.getAttribute('width');
+                let h = svg.getAttribute('height');
+                // Extract vertical alignment, falling back to 0
+                let vAlign = svg.style.verticalAlign || '0';
+
+                // Convert 'ex' to 'em' so it scales properly even if fonts fail
+                if (vAlign.includes('ex')) vAlign = (parseFloat(vAlign) * 0.5) + 'em';
+                if (w && w.includes('ex')) w = (parseFloat(w) * 0.5) + 'em';
+                if (h && h.includes('ex')) h = (parseFloat(h) * 0.5) + 'em';
+
+                let svgData = new XMLSerializer().serializeToString(svg);
+                // Ensure namespace exists for proper rendering
+                if (!svgData.includes('xmlns=')) {
+                    svgData = svgData.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" ');
                 }
-                if (svg.getAttribute('width') && svg.getAttribute('width').includes('ex')) {
-                    svg.setAttribute('width', (parseFloat(svg.getAttribute('width')) * 0.5) + 'em');
-                }
-                if (svg.getAttribute('height') && svg.getAttribute('height').includes('ex')) {
-                    svg.setAttribute('height', (parseFloat(svg.getAttribute('height')) * 0.5) + 'em');
-                }
+
+                const base64 = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+
+                const img = document.createElement('img');
+                img.src = base64;
+                img.style.width = w;
+                img.style.height = h;
+                img.style.verticalAlign = vAlign;
+                img.className = 'mathjax-temp-img';
+
+                // Hide SVG, show static image
+                svg.style.display = 'none';
+                mjx.appendChild(img);
             });
+        }
+
+        // Reverts the image hack after the PDF is generated
+        function restoreMathSVGs(container) {
+            container.querySelectorAll('.mathjax-temp-img').forEach(img => img.remove());
+            container.querySelectorAll('mjx-container svg').forEach(svg => svg.style.display = '');
         }
 
         function invalidateGeneratedPdf() {
@@ -498,14 +528,11 @@
 
             if (window.MathJax) { 
                 await MathJax.typesetPromise([pdfPreviewBox]); 
-                // Fix baselines for the live preview as well
-                forceMathBaselines(pdfPreviewBox);
             }
             drawPageBreaks();
             invalidateGeneratedPdf();
         }
 
-        /* Simplified, clean calculation. No DOM injection for layout. */
         async function drawPageBreaks() {
             await new Promise(r => setTimeout(r, 50));
             const overlays = document.getElementById('pdf-page-overlays');
@@ -636,13 +663,10 @@
             deskContainer.style.zoom = '1';
             document.body.classList.add('is-generating-pdf');
             
-            // Wait for all remote fonts to completely load before doing anything
-            await document.fonts.ready;
+            // Execute the workaround: Convert all MathJax SVGs to static images
+            convertMathToImages(pdfPreviewBox);
             
-            // Re-apply the unit conversion just to be completely safe before snapshotting
-            forceMathBaselines(pdfPreviewBox);
-            
-            // Tiny delay to let browser re-render un-zoomed DOM
+            // Give the browser time to paint the new images
             await new Promise(res => setTimeout(res, 300)); 
             
             const opt = {
@@ -661,8 +685,8 @@
                     for (let i = 1; i <= finalPagesCount; i++) {
                         pdf.setPage(i); pdf.setFontSize(10); pdf.setTextColor(150);
                         const pw = pdf.internal.pageSize.getWidth(); const ph = pdf.internal.pageSize.getHeight();
-                        // Place at exact bottom center (10mm from bottom edge)
-                        pdf.text('- ' + i + ' -', pw / 2, ph - 10, { align: 'center' });
+                        // Place at exact bottom center
+                        pdf.text('- ' + i + ' -', pw / 2, ph - (b / 2 > 8 ? b / 2 : 8), { align: 'center' });
                     }
                     return pdf;
                 });
@@ -677,6 +701,8 @@
                 console.error("PDF generation failed:", error); alert("Failed to generate PDF. System Error: " + (error.message || error));
                 generatePdfBtn.disabled = false; generatePdfBtn.textContent = 'Generate PDF';
             } finally {
+                // IMPORTANT: Restore the live SVGs immediately after generating
+                restoreMathSVGs(pdfPreviewBox);
                 document.body.classList.remove('is-generating-pdf');
                 deskContainer.style.zoom = '0.6'; 
             }
