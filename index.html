@@ -4,127 +4,51 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Markdown & MathJax App</title>
+    <script>
+        MathJax = {
+            tex: { inlineMath: [['$', '$']], displayMath: [['$$', '$$']] },
+            chtml: { displayAlign: 'left' },
+            options: { enableMenu: false }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f4f4f9;
-            color: #333;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-
-        /* Dark mode styles */
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f4f4f9; color: #333; display: flex; flex-direction: column; gap: 15px; }
         body.dark-mode { background-color: #121212; color: #e0e0e0; }
-        body.dark-mode .modal-content, body.dark-mode #markdown-editor, body.dark-mode #rendered-output {
-            background-color: #1e1e1e; color: #e0e0e0; border-color: #333;
-        }
-        body.dark-mode .header button { background-color: #bb86fc; color: black; }
-        body.dark-mode .header button:hover { background-color: #3700b3; }
-        body.dark-mode .settings-grid input, body.dark-mode .settings-grid select {
-            background-color: #333; color: #e0e0e0; border-color: #555;
-        }
-
-        /* Table Styles */
+        body.dark-mode .modal-content, body.dark-mode #markdown-editor, body.dark-mode #rendered-output { background-color: #1e1e1e; color: #e0e0e0; border-color: #333; }
+        
+        #markdown-editor, #rendered-output { width: 100%; height: 70vh; padding: 15px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 8px; background-color: white; font-size: 16px; }
+        #rendered-output { overflow-y: auto; display: none; }
         #rendered-output table, #pdf-preview-box table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
-        #rendered-output th, #rendered-output td, #pdf-preview-box th, #pdf-preview-box td {
-            border: 1px solid #ccc; padding: 8px 12px; text-align: left;
-        }
-        #rendered-output th, #pdf-preview-box th { background-color: rgba(0, 0, 0, 0.05); font-weight: bold; }
+        #rendered-output th, #rendered-output td, #pdf-preview-box th, #pdf-preview-box td { border: 1px solid #ccc; padding: 8px 12px; }
 
-        /* CSS SAFETY: Prevent elements from splitting natively */
-        #pdf-preview-box h1, #pdf-preview-box h2, #pdf-preview-box h3, #pdf-preview-box h4, 
-        #pdf-preview-box h5, #pdf-preview-box h6, #pdf-preview-box tr, #pdf-preview-box mjx-container,
-        #pdf-preview-box p, #pdf-preview-box li {
+        /* SAFETY: Prevent splitting math/headings/tables across pages */
+        #pdf-preview-box h1, #pdf-preview-box h2, #pdf-preview-box h3, 
+        #pdf-preview-box tr, #pdf-preview-box p, #pdf-preview-box li,
+        #pdf-preview-box mjx-container {
             page-break-inside: avoid !important;
             break-inside: avoid !important;
         }
 
-        .page-break {
-            page-break-before: always;
-            break-before: page;
-            height: 0px;
-            display: block;
-            border: none;
-            margin: 0;
-            padding: 0;
-            position: relative;
-        }
+        .page-break { page-break-before: always; break-before: page; height: 0px; display: block; border: none; position: relative; }
+        .pdf-preview-wrapper .page-break::after { content: "Manual Break ✂️"; position: absolute; top: -10px; right: 0; color: #007bff; font-size: 11px; font-weight: bold; background: white; padding: 0 5px; border-bottom: 2px dashed #007bff; width: 100%; text-align: right; }
 
-        /* Preview UI */
-        .pdf-preview-wrapper .page-break::before {
-            content: "Manual Break ✂️"; position: absolute; top: -10px; right: 0;
-            color: #007bff; font-size: 11px; font-weight: bold; background: white; padding: 0 5px; z-index: 10;
-        }
-        .pdf-preview-wrapper .page-break::after {
-            content: ""; position: absolute; top: 0; left: 0; right: 0;
-            border-bottom: 2px dashed #007bff; z-index: 5;
-        }
-
-        body.is-generating-pdf .page-break::before,
-        body.is-generating-pdf .page-break::after {
-            display: none !important;
-        }
-
-        .header {
-            display: flex; justify-content: flex-end; align-items: center;
-            overflow-x: auto; white-space: nowrap; padding-bottom: 5px;
-        }
-        .toolbar-buttons { display: flex; gap: 10px; flex-wrap: nowrap; min-width: 100%; }
-        .header button {
-            padding: 10px 15px; cursor: pointer; border: none; border-radius: 5px;
-            background-color: #007bff; color: white; transition: 0.3s ease;
-            flex-shrink: 0; font-size: 20px;
-        }
-
-        #markdown-editor, #rendered-output {
-            width: 100%; height: 70vh; padding: 15px; box-sizing: border-box;
-            border: 1px solid #ccc; border-radius: 8px; background-color: white; font-size: 16px;
-        }
-        #rendered-output { overflow-y: auto; display: none; }
+        .header { display: flex; justify-content: flex-end; gap: 10px; padding-bottom: 5px; }
+        .header button { padding: 10px 15px; cursor: pointer; border: none; border-radius: 5px; background-color: #007bff; color: white; font-size: 20px; }
         
-        /* Modals */
-        .modal {
-            display: none; position: fixed; z-index: 10; left: 0; top: 0;
-            width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4);
-        }
-        .modal-content {
-            background-color: #fff; margin: 5% auto; padding: 20px; border: 1px solid #888; 
-            width: 80%; max-width: 600px; border-radius: 10px; position: relative;
-        }
-        .close-btn { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
-
-        .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; }
-        .settings-grid div { display: flex; flex-direction: column; }
-        
-        /* PDF Preview Area */
-        #pdf-share-modal .modal-content { max-width: 1100px; }
+        .modal { display: none; position: fixed; z-index: 10; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.4); }
+        .modal-content { background-color: #fff; margin: 5% auto; padding: 20px; border-radius: 10px; width: 90%; max-width: 1000px; }
         .pdf-panel-body { display: flex; flex-wrap: wrap; gap: 20px; margin-top: 15px; }
-        .pdf-controls {
-            flex: 1; min-width: 250px; display: flex; flex-direction: column; gap: 15px;
-            background: #f9f9f9; padding: 15px; border-radius: 8px; border: 1px solid #eee;
-        }
-        .pdf-preview-wrapper {
-            flex: 2; min-width: 300px; height: 600px; background: #525659;
-            padding: 20px; overflow: auto; border-radius: 8px; text-align: center;
-        }
+        .pdf-controls { flex: 1; min-width: 250px; display: flex; flex-direction: column; gap: 15px; background: #f9f9f9; padding: 15px; border-radius: 8px; }
+        .pdf-preview-wrapper { flex: 2; min-width: 300px; height: 600px; background: #525659; padding: 20px; overflow: auto; border-radius: 8px; text-align: center; }
         #pdf-desk-container { display: inline-block; text-align: left; zoom: 0.6; }
-        #pdf-desk {
-            background-color: white; width: var(--pw, 210mm);
-            padding: var(--mt, 12.7mm) var(--mr, 12.7mm) 0 var(--ml, 12.7mm);
-            box-sizing: border-box; box-shadow: 0 4px 15px rgba(0,0,0,0.5); position: relative;
-        }
-        #pdf-preview-box { color: black; width: 100%; min-height: var(--ch, 271.6mm); position: relative; background-color: white; }
-        #pdf-page-overlays { position: absolute; top: var(--mt, 12.7mm); left: var(--ml, 12.7mm); width: calc(var(--pw, 210mm) - var(--ml, 12.7mm) - var(--mr, 12.7mm)); height: 100%; pointer-events: none; z-index: 5; }
-
-        #page-selection-container { margin-top: 10px; padding-top: 10px; border-top: 1px solid #ccc; }
-        #page-checkboxes { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 5px; }
-        .page-checkbox-label { display: flex; align-items: center; gap: 4px; font-size: 14px; background: #e9ecef; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
-
+        #pdf-desk { background-color: white; width: 210mm; padding: 12.7mm; box-sizing: border-box; box-shadow: 0 4px 15px rgba(0,0,0,0.5); position: relative; }
+        #pdf-preview-box { color: black; width: 100%; min-height: 271.6mm; background-color: white; }
+        
+        #page-checkboxes { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 5px; }
+        .page-checkbox-label { display: flex; align-items: center; gap: 4px; font-size: 13px; background: #e9ecef; padding: 4px 8px; border-radius: 4px; }
+        
         @media print {
-            body { padding: 0 !important; margin: 0 !important; background-color: white !important; }
             .header, #markdown-editor, .modal { display: none !important; }
             #rendered-output { display: block !important; height: auto !important; border: none !important; padding: 0 !important; }
         }
@@ -133,55 +57,34 @@
 <body>
 
     <div class="header">
-        <div class="toolbar-buttons">
-            <button id="toggle-view-btn">↔️</button>
-            <button id="clear-btn">🗑️</button>
-            <button id="open-btn">📂</button>
-            <button id="download-btn">💾</button>
-            <button id="insert-break-btn">✂️</button>
-            <button id="print-btn">🖨️</button>
-            <button id="share-pdf-btn">📤</button>
-            <button id="settings-btn">⚙️</button>
-        </div>
+        <button id="toggle-view-btn">↔️</button>
+        <button id="clear-btn">🗑️</button>
+        <button id="download-btn">💾</button>
+        <button id="insert-break-btn">✂️</button>
+        <button id="print-btn">🖨️</button>
+        <button id="share-pdf-btn">📤</button>
     </div>
 
-    <input type="file" id="file-input" accept=".md,.txt" style="display: none;">
-    <textarea id="markdown-editor" placeholder="Start typing markdown..."></textarea>
+    <textarea id="markdown-editor" placeholder="Type here..."></textarea>
     <div id="rendered-output"></div>
-
-    <div id="settings-modal" class="modal">
-        <div class="modal-content">
-            <span class="close-btn" id="close-settings">&times;</span>
-            <h2>Settings</h2>
-            <div class="settings-grid">
-                <div><label>Font Family:</label><select id="font-family-select"><option value="Arial, sans-serif">Arial</option><option value="Georgia, serif">Georgia</option><option value="Verdana, sans-serif">Verdana</option></select></div>
-                <div><label>Heading 1 Color:</label><input type="color" id="h1-color" value="#333333"></div>
-                <div><label>Heading 2 Color:</label><input type="color" id="h2-color" value="#444444"></div>
-                <div><label>Heading 3 Color:</label><input type="color" id="h3-color" value="#555555"></div>
-                <div><label>MathJax Color:</label><input type="color" id="math-color" value="#000000"></div>
-                <div><label>MathJax Size (em):</label><input type="number" id="math-size" value="1.1" step="0.1"></div>
-            </div>
-            <button id="save-settings-btn" style="margin-top:20px; width:100%; padding:10px; background:#28a745; color:white; border:none; border-radius:5px;">Save Settings</button>
-        </div>
-    </div>
 
     <div id="pdf-share-modal" class="modal">
         <div class="modal-content">
-            <span class="close-btn" id="close-pdf-modal">&times;</span>
+            <span style="float:right; cursor:pointer; font-size:24px;" onclick="document.getElementById('pdf-share-modal').style.display='none'">&times;</span>
             <h2>PDF Export</h2>
             <div class="pdf-panel-body">
                 <div class="pdf-controls">
-                    <div><label>Content Scale: <span id="pdf-scale-val">100%</span></label><input type="range" id="pdf-scale" min="50" max="150" value="100" style="width:100%;"></div>
-                    <div><label>Orientation:</label><select id="pdf-orientation"><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></div>
-                    <div id="page-selection-container"><label>Include Pages:</label><div id="page-checkboxes"></div></div>
-                    <button id="generate-pdf-btn" style="margin-top:auto; padding:12px; background:#28a745; color:white; border:none; border-radius:5px;">Step 1: Generate PDF</button>
+                    <div><label>Content Scale: <span id="scale-val">100%</span></label>
+                        <input type="range" id="pdf-scale" min="50" max="150" value="100" style="width:100%"></div>
+                    <div id="page-selection-container"><label>Select Pages:</label><div id="page-checkboxes"></div></div>
+                    <button id="generate-pdf-btn" style="margin-top:auto; padding:12px; background:#28a745; color:white; border:none; border-radius:5px;">1. Generate PDF</button>
                     <div id="post-generate-actions" style="display:none; gap:10px;">
-                        <button id="share-generated-btn" style="flex:1; padding:10px; background:#007bff; color:white; border:none; border-radius:5px;">Share</button>
-                        <button id="download-generated-btn" style="flex:1; padding:10px; background:#17a2b8; color:white; border:none; border-radius:5px;">Download</button>
+                        <button id="share-btn" style="flex:1; padding:10px; background:#007bff; color:white; border:none; border-radius:5px;">Share</button>
+                        <button id="download-gen-btn" style="flex:1; padding:10px; background:#17a2b8; color:white; border:none; border-radius:5px;">Download</button>
                     </div>
                 </div>
                 <div class="pdf-preview-wrapper">
-                    <div id="pdf-desk-container"><div id="pdf-desk"><div id="pdf-preview-box"></div><div id="pdf-page-overlays"></div></div></div>
+                    <div id="pdf-desk-container"><div id="pdf-desk"><div id="pdf-preview-box"></div></div></div>
                 </div>
             </div>
         </div>
@@ -189,10 +92,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-    <script>
-        MathJax = { tex: { inlineMath: [['$', '$']], displayMath: [['$$', '$$']] }, svg: { fontCache: 'none' } };
-    </script>
-    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
     
     <script>
         const editor = document.getElementById('markdown-editor');
@@ -203,110 +102,33 @@
         
         let currentPdfBlob = null, currentPdfFile = null, isEditorView = true;
 
-        // NUCLEAR FIX: Freezes MathJax SVGs into static, unshiftable images
-        async function freezeMathToImages(container) {
-            const mathContainers = container.querySelectorAll('mjx-container');
-            for (const mjx of mathContainers) {
-                const svg = mjx.querySelector('svg');
-                if (!svg) continue;
-
-                // Capture exact metrics
-                const rect = svg.getBoundingClientRect();
-                const vAlign = window.getComputedStyle(svg).verticalAlign;
-                
-                const svgData = new XMLSerializer().serializeToString(svg);
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                const img = new Image();
-                
-                // Boost resolution for crisp printing
-                const pixelRatio = 3;
-                canvas.width = rect.width * pixelRatio;
-                canvas.height = rect.height * pixelRatio;
-
-                const svgBlob = new Blob([svgData], {type: 'image/svg+xml;charset=utf-8'});
-                const url = URL.createObjectURL(svgBlob);
-
-                await new Promise(resolve => {
-                    img.onload = () => {
-                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                        const pngUrl = canvas.toDataURL('image/png');
-                        const finalImg = document.createElement('img');
-                        finalImg.src = pngUrl;
-                        finalImg.style.width = rect.width + 'px';
-                        finalImg.style.height = rect.height + 'px';
-                        finalImg.style.verticalAlign = vAlign; // The "Golden Fix" for the shift
-                        finalImg.className = 'math-frozen';
-                        
-                        svg.style.display = 'none';
-                        mjx.appendChild(finalImg);
-                        URL.revokeObjectURL(url);
-                        resolve();
-                    };
-                    img.src = url;
-                });
-            }
-        }
-
-        function restoreMath(container) {
-            container.querySelectorAll('.math-frozen').forEach(img => img.remove());
-            container.querySelectorAll('mjx-container svg').forEach(svg => svg.style.display = '');
-        }
-
         function renderContent() {
             let text = editor.value;
-            // Handle specific escaping needs
             let processed = text.replace(/(\$\$?)([\s\S]*?)\1/g, (m, d, content) => {
                 return d + content.replace(/%/g, '\\%').replace(/₹/g, '\\text{₹}') + d;
             });
             output.innerHTML = marked.parse(processed, { breaks: true });
-            applyStyles();
             if (window.MathJax) MathJax.typesetPromise([output]);
             resetPdfBtn();
-        }
-
-        function applyStyles() {
-            const s = JSON.parse(localStorage.getItem('appSettings')) || {};
-            const styles = `
-                #rendered-output, #pdf-preview-box { font-family: ${s.fontFamily || 'Arial'}; }
-                #rendered-output h1, #pdf-preview-box h1 { color: ${s.h1Color || '#333'}; }
-                #rendered-output h2, #pdf-preview-box h2 { color: ${s.h2Color || '#444'}; }
-                #rendered-output mjx-container, #pdf-preview-box mjx-container { 
-                    color: ${s.mathColor || '#000'} !important; 
-                    font-size: ${s.mathSize || 1.1}em !important; 
-                }
-            `;
-            let styleTag = document.getElementById('custom-styles');
-            if (!styleTag) { styleTag = document.createElement('style'); styleTag.id = 'custom-styles'; document.head.appendChild(styleTag); }
-            styleTag.innerHTML = styles;
         }
 
         async function updatePdfPreview() {
             pdfPreviewBox.innerHTML = output.innerHTML;
             if (window.MathJax) await MathJax.typesetPromise([pdfPreviewBox]);
-            drawPageNumbers();
-        }
-
-        function drawPageNumbers() {
-            const overlays = document.getElementById('pdf-page-overlays');
-            overlays.innerHTML = '';
-            const pageHeightPx = 1025; // Approximate A4 pixels at 0.6 zoom
-            const totalPages = Math.ceil(pdfPreviewBox.scrollHeight / pageHeightPx) || 1;
             
+            const pageHeightPx = 1120; // Estimated A4 height
+            const totalPages = Math.ceil(pdfPreviewBox.scrollHeight / pageHeightPx) || 1;
             const pageContainer = document.getElementById('page-checkboxes');
             pageContainer.innerHTML = '';
             for (let i = 1; i <= totalPages; i++) {
-                const label = document.createElement('label');
-                label.className = 'page-checkbox-label';
-                label.innerHTML = `<input type="checkbox" value="${i}" checked> Pg ${i}`;
-                pageContainer.appendChild(label);
+                pageContainer.innerHTML += `<label class="page-checkbox-label"><input type="checkbox" value="${i}" checked> Pg ${i}</label>`;
             }
         }
 
         function resetPdfBtn() {
             generatePdfBtn.style.display = 'block';
             generatePdfBtn.disabled = false;
-            generatePdfBtn.textContent = 'Step 1: Generate PDF';
+            generatePdfBtn.textContent = '1. Generate PDF';
             postActions.style.display = 'none';
         }
 
@@ -315,22 +137,15 @@
             if (!selected.length) return alert("Select a page");
 
             generatePdfBtn.disabled = true;
-            generatePdfBtn.textContent = 'Freezing Layout...';
-            
-            document.body.classList.add('is-generating-pdf');
+            generatePdfBtn.textContent = 'Generating...';
             document.getElementById('pdf-desk-container').style.zoom = "1";
             
-            // Wait for GitHub Pages network fonts
-            await document.fonts.ready;
-            await freezeMathToImages(pdfPreviewBox);
-            
-            generatePdfBtn.textContent = 'Crunching PDF...';
             const opt = {
-                margin: [12.7, 12.7, 15, 12.7], // Narrow margins
+                margin: [12.7, 12.7, 15, 12.7],
                 filename: 'document.pdf',
                 image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 2, useCORS: true },
-                jsPDF: { unit: 'mm', format: 'a4', orientation: document.getElementById('pdf-orientation').value },
+                html2canvas: { scale: 2, useCORS: true, logging: false },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
                 pagebreak: { mode: ['css', 'legacy'] }
             };
 
@@ -338,7 +153,6 @@
                 const pdf = await html2pdf().set(opt).from(pdfPreviewBox).toPdf().get('pdf').then(pdf => {
                     const total = pdf.internal.getNumberOfPages();
                     for (let i = total; i >= 1; i--) if (!selected.includes(i)) pdf.deletePage(i);
-                    
                     const finalTotal = pdf.internal.getNumberOfPages();
                     for (let i = 1; i <= finalTotal; i++) {
                         pdf.setPage(i);
@@ -357,17 +171,15 @@
                 alert("Error: " + e.message);
                 generatePdfBtn.disabled = false;
             } finally {
-                restoreMath(pdfPreviewBox);
-                document.body.classList.remove('is-generating-pdf');
                 document.getElementById('pdf-desk-container').style.zoom = "0.6";
             }
         });
 
-        document.getElementById('share-generated-btn').addEventListener('click', async () => {
+        document.getElementById('share-btn').addEventListener('click', async () => {
             if (navigator.share && currentPdfFile) await navigator.share({ files: [currentPdfFile] });
         });
 
-        document.getElementById('download-generated-btn').addEventListener('click', () => {
+        document.getElementById('download-gen-btn').addEventListener('click', () => {
             const url = URL.createObjectURL(currentPdfBlob);
             const a = document.createElement('a'); a.href = url; a.download = "document.pdf"; a.click();
         });
@@ -391,27 +203,9 @@
             if (!isEditorView) renderContent();
         });
 
-        document.getElementById('settings-btn').addEventListener('click', () => document.getElementById('settings-modal').style.display='block');
-        document.querySelectorAll('.close-btn').forEach(b => b.onclick = () => document.querySelectorAll('.modal').forEach(m => m.style.display='none'));
-        document.getElementById('save-settings-btn').onclick = () => {
-            const s = {
-                fontFamily: document.getElementById('font-family-select').value,
-                h1Color: document.getElementById('h1-color').value,
-                mathColor: document.getElementById('math-color').value,
-                mathSize: document.getElementById('math-size').value
-            };
-            localStorage.setItem('appSettings', JSON.stringify(s));
-            document.getElementById('settings-modal').style.display='none';
-            renderContent();
-        };
-
+        document.getElementById('print-btn').onclick = () => window.print();
         editor.oninput = renderContent;
-        window.onload = () => {
-            const saved = localStorage.getItem('markdownContent');
-            if (saved) editor.value = saved;
-            renderContent();
-        };
-        editor.onblur = () => localStorage.setItem('markdownContent', editor.value);
+        window.onload = renderContent;
     </script>
 </body>
 </html>
