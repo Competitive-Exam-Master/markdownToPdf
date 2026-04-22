@@ -360,6 +360,22 @@
         let currentPdfBlob = null;
         let currentPdfFile = null;
 
+        // --- THE FIX FOR GITHUB PAGES MATHJAX SHIFT ---
+        // Converts MathJax 'ex' units to solid 'em' units so baselines survive PDF generation over network delays.
+        function fixMathBaselines(container) {
+            container.querySelectorAll('mjx-container svg').forEach(svg => {
+                if (svg.style.verticalAlign && svg.style.verticalAlign.includes('ex')) {
+                    svg.style.verticalAlign = (parseFloat(svg.style.verticalAlign) * 0.5) + 'em'; 
+                }
+                if (svg.getAttribute('width') && svg.getAttribute('width').includes('ex')) {
+                    svg.setAttribute('width', (parseFloat(svg.getAttribute('width')) * 0.5) + 'em');
+                }
+                if (svg.getAttribute('height') && svg.getAttribute('height').includes('ex')) {
+                    svg.setAttribute('height', (parseFloat(svg.getAttribute('height')) * 0.5) + 'em');
+                }
+            });
+        }
+
         function invalidateGeneratedPdf() {
             generatePdfBtn.style.display = 'block';
             generatePdfBtn.textContent = 'Generate PDF';
@@ -385,8 +401,14 @@
             processedText = processedText.replace(/\n\n\n+/g, match => '\n\n' + '<br>'.repeat(Math.floor((match.length - 2) / 2)) + '\n\n');
             output.innerHTML = marked.parse(processedText, { breaks: true });
             applyCustomStyles();
-            if (window.MathJax) { MathJax.typesetPromise([output]); }
-            invalidateGeneratedPdf();
+            if (window.MathJax) { 
+                MathJax.typesetPromise([output]).then(() => {
+                    fixMathBaselines(output);
+                    invalidateGeneratedPdf();
+                }); 
+            } else {
+                invalidateGeneratedPdf();
+            }
         }
 
         function loadSettings() {
@@ -478,12 +500,13 @@
                 pdfPreviewBox.style.columnCount = '1';
             }
 
-            if (window.MathJax) { await MathJax.typesetPromise([pdfPreviewBox]); }
+            if (window.MathJax) { 
+                await MathJax.typesetPromise([pdfPreviewBox]); 
+                fixMathBaselines(pdfPreviewBox);
+            }
             drawPageBreaks();
-            invalidateGeneratedPdf();
         }
 
-        /* Simplified, clean calculation. No DOM injection for layout. */
         async function drawPageBreaks() {
             await new Promise(r => setTimeout(r, 50));
             const overlays = document.getElementById('pdf-page-overlays');
@@ -495,7 +518,6 @@
             const ph = orient === 'landscape' ? 210 : 297;
             const contentHeightMm = ph - t - b;
             
-            // Accurately measure 1 physical CSS mm
             const mmNode = document.createElement('div');
             mmNode.style.height = '100mm'; mmNode.style.position = 'absolute';
             pdfPreviewBox.appendChild(mmNode);
@@ -506,11 +528,10 @@
             const totalContentHeight = pdfPreviewBox.scrollHeight;
             const totalPages = Math.max(1, Math.ceil(totalContentHeight / pageHeightPx));
             
-            // Draw page numbers in the preview (bottom center alignment)
+            // Draw page numbers (bottom center alignment) for live preview
             for (let i = 1; i <= totalPages; i++) {
                 const pageNumDiv = document.createElement('div');
                 pageNumDiv.style.position = 'absolute';
-                // Place it at the absolute bottom of where this page ends in the preview
                 pageNumDiv.style.top = (i * pageHeightPx - (b * pxPerMm / 2)) + 'px'; 
                 pageNumDiv.style.transform = 'translateY(-100%)';
                 pageNumDiv.style.width = '100%'; 
@@ -621,7 +642,6 @@
             const opt = {
                 margin: [t, l, b, r], filename: 'document.pdf', image: { type: 'jpeg', quality: 0.98 },
                 html2canvas: { scale: 2, useCORS: true, scrollY: 0 }, jsPDF: { unit: 'mm', format: 'a4', orientation: orient },
-                // Use pure 'css' mode with legacy fallback. Html2pdf natively respects the page-break-inside: avoid CSS.
                 pagebreak: { mode: ['css', 'legacy'] } 
             };
 
@@ -635,7 +655,7 @@
                     for (let i = 1; i <= finalPagesCount; i++) {
                         pdf.setPage(i); pdf.setFontSize(10); pdf.setTextColor(150);
                         const pw = pdf.internal.pageSize.getWidth(); const ph = pdf.internal.pageSize.getHeight();
-                        // Exactly bottom center placement
+                        // Place at exact bottom center
                         pdf.text('- ' + i + ' -', pw / 2, ph - (b / 2 > 8 ? b / 2 : 8), { align: 'center' });
                     }
                     return pdf;
